@@ -95,7 +95,7 @@ INTRO_TEXT = (
     "This tool walks you through the narrow bandpass circuit decision tree. "
     "Choose a circuit type, then its configuration and gain, then enter the "
     "center frequency (and the bandwidth where the tree allows a range). "
-    "Only the values you choose are saved."
+    "Only the selected values are saved; where the tree fixes Pbandwidth as a % of fcenter, it is set automatically."
 )
 
 # ---------------------------------------------------------------------------
@@ -110,13 +110,18 @@ COLUMNS = [
     "Gain Value (dB)",        # only when the user enters a gain inside a range
     "Center Frequency Value",
     "Center Frequency Unit",
-    "Bandwidth Value",        # only when the user enters a bandwidth inside a range
+    "Bandwidth Value",        # entered by the user (range) or set automatically (fixed % of fcenter)
     "Bandwidth Unit",
 ]
 
 
 def save_row(record):
     """Append one record to the CSV file (header written when the file is new)."""
+    if CSV_PATH.exists() and CSV_PATH.stat().st_size > 0:
+        with open(CSV_PATH, newline="", encoding="utf-8-sig") as f:
+            header = next(csv.reader(f), [])
+        if header != COLUMNS:  # file from an older version: keep it as a backup
+            CSV_PATH.replace(CSV_PATH.with_suffix(".old.csv"))
     is_new = not CSV_PATH.exists() or CSV_PATH.stat().st_size == 0
     with open(CSV_PATH, "a", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=COLUMNS)
@@ -268,8 +273,14 @@ def collect_selections(circuit):
     record["Center Frequency Value"] = fc_val
     record["Center Frequency Unit"] = fc_unit
 
-    # bandwidth - the user picks a value only where the tree gives a range
-    if gain.bw_is_range:
+    # bandwidth - fixed by the tree (set automatically) or chosen within a range
+    if not gain.bw_is_range:
+        pct = gain.bw_pct[0]
+        auto_bw = float(f"{fc_val * pct / 100:.10g}")
+        record["Bandwidth Value"] = auto_bw
+        record["Bandwidth Unit"] = fc_unit
+        st.success(f"Pbandwidth is set automatically: {pct:g}% of fcenter = {auto_bw:g} {fc_unit}")
+    else:
         lo_hz = fc_hz * gain.bw_pct[0] / 100
         hi_hz = fc_hz * gain.bw_pct[1] / 100
         st.caption(f"For fcenter = {fc_val:g} {fc_unit}, Pbandwidth must be between "
@@ -293,8 +304,18 @@ def collect_selections(circuit):
 # ---------------------------------------------------------------------------
 def show_summary(record):
     st.subheader("Your Selected Configuration")
-    rows = [(k, v) for k, v in record.items() if v is not None]
-    st.table(pd.DataFrame(rows, columns=["Item", "Your choice"]).astype(str).set_index("Item"))
+    rows = []
+    for k, v in record.items():
+        if v is None or k == "Bandwidth Unit":
+            continue
+        if k == "Bandwidth Value":
+            k, v = "Pbandwidth", f"{v:g} {record['Bandwidth Unit']}"
+        elif k == "Center Frequency Value":
+            k, v = "Center Frequency (fcenter)", f"{v:g} {record['Center Frequency Unit']}"
+        elif k == "Center Frequency Unit":
+            continue
+        rows.append((k, str(v)))
+    st.table(pd.DataFrame(rows, columns=["Item", "Your choice"]).set_index("Item"))
 
 
 def render_save_and_download(record):
@@ -346,6 +367,7 @@ def main():
     st.session_state.setdefault("msg", None)
 
     st.title("Narrow Bandpass Circuits")
+    st.caption("Version 3 — Pbandwidth auto-set for fixed-bandwidth paths")
     st.write(INTRO_TEXT)
     with st.expander("Notes"):
         st.markdown(
