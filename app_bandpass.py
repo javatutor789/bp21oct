@@ -107,7 +107,6 @@ COLUMNS = [
     "Circuit Type",
     "Configuration",          # Non-Inverting / Inverting / Single to Differential / Fully Differential
     "Gain Selection",
-    "Gain Value (dB)",        # only when the user enters a gain inside a range
     "Center Frequency Value",
     "Center Frequency Unit",
     "Bandwidth Value",        # entered by the user (range) or set automatically (fixed % of fcenter)
@@ -148,10 +147,9 @@ def record_to_csv_text(record):
 # 3. HELPERS
 # ---------------------------------------------------------------------------
 KEY_CIRCUIT, KEY_SUB, KEY_GAIN = "k_circuit", "k_sub", "k_gain"
-KEY_GAIN_VAL = "k_gain_val"
 KEY_FC_VAL, KEY_FC_UNIT = "k_fc_val", "k_fc_unit"
 KEY_BW_VAL, KEY_BW_UNIT = "k_bw_val", "k_bw_unit"
-ALL_KEYS = [KEY_SUB, KEY_GAIN, KEY_GAIN_VAL, KEY_FC_VAL, KEY_FC_UNIT, KEY_BW_VAL, KEY_BW_UNIT]
+ALL_KEYS = [KEY_SUB, KEY_GAIN, KEY_FC_VAL, KEY_FC_UNIT, KEY_BW_VAL, KEY_BW_UNIT]
 
 
 def fmt_hz(hz):
@@ -176,11 +174,11 @@ def on_circuit_change():
 
 
 def on_sub_change():
-    clear(KEY_GAIN, KEY_GAIN_VAL, KEY_FC_VAL, KEY_FC_UNIT, KEY_BW_VAL, KEY_BW_UNIT)
+    clear(KEY_GAIN, KEY_FC_VAL, KEY_FC_UNIT, KEY_BW_VAL, KEY_BW_UNIT)
 
 
 def on_gain_change():
-    clear(KEY_GAIN_VAL, KEY_FC_VAL, KEY_FC_UNIT, KEY_BW_VAL, KEY_BW_UNIT)
+    clear(KEY_FC_VAL, KEY_FC_UNIT, KEY_BW_VAL, KEY_BW_UNIT)
 
 
 def on_value_change():
@@ -246,21 +244,6 @@ def collect_selections(circuit):
         f"**Pbandwidth ({passband} passband):** {bw_text}"
     )
 
-    complete = True
-
-    # gain value inside a range
-    if gain.gain_is_range:
-        lo, hi = gain.gain_range_db
-        gv = st.number_input(
-            f"Gain value (dB) — between {lo:g} and {hi:g} dB", min_value=float(lo),
-            max_value=float(hi), value=None, step=0.5, format="%g", key=KEY_GAIN_VAL,
-            placeholder=f"e.g. {(lo + hi) / 2:g}", on_change=on_value_change,
-        )
-        if gv is None:
-            complete = False
-        else:
-            record["Gain Value (dB)"] = gv
-
     # center frequency
     fc_val, fc_unit = number_with_unit("Center frequency (fcenter)", KEY_FC_VAL, KEY_FC_UNIT, "e.g. 2.5")
     if fc_val is None:
@@ -296,7 +279,7 @@ def collect_selections(circuit):
         record["Bandwidth Value"] = bw_val
         record["Bandwidth Unit"] = bw_unit
 
-    return record if complete else None
+    return record
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +350,7 @@ def main():
     st.session_state.setdefault("msg", None)
 
     st.title("Narrow Bandpass Circuits")
-    st.caption("Version 3 — Pbandwidth auto-set for fixed-bandwidth paths")
+    st.caption("Version 4 — gain saved as the selected category only")
     st.write(INTRO_TEXT)
     with st.expander("Notes"):
         st.markdown(
